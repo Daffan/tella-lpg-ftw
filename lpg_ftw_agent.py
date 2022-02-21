@@ -14,13 +14,20 @@ DEVICE = "cpu"
 
 # Constants copied from experiments.habitat_ste_m15.py
 BASELINE_TRAINING_EPOCH = 20
-NORMALIZED_STEP_SIZE = 0.000001
+NORMALIZED_STEP_SIZE = 0.00001
 HVP_SAMPLEFRAC = 0.00833333333
 BATCH_SIZE = 128
 
 N = 50
 GAMMA = 0.995
 GAE_LAMBDA = None # 0.97
+
+POLICY_HIDDEN_SIZE = 128
+BASELINE_HIDDEN_SIZE = 128
+K=1
+MAX_K=2
+
+BASELINE_LR = 1e-5
 
 class LpgFtwAgent(tella.ContinualRLAgent):
     def __init__(
@@ -41,8 +48,8 @@ class LpgFtwAgent(tella.ContinualRLAgent):
         policy = MLPLPGFTW(
             observation_space,
             action_space,
-            hidden_size=32,
-            k=1, max_k=2,
+            hidden_size=POLICY_HIDDEN_SIZE,
+            k=K, max_k=MAX_K,
             seed=rng_seed,
             use_gpu=(DEVICE != "cpu")
         )
@@ -79,9 +86,9 @@ class LpgFtwAgent(tella.ContinualRLAgent):
             self.agent.baselines[task_name] = MLPBaseline(
                 self.observation_space,
                 reg_coef=1e-3,
-                batch_size=64,
+                batch_size=BASELINE_HIDDEN_SIZE,
                 epochs=BASELINE_TRAINING_EPOCH,
-                learn_rate=1e-4 / 16,
+                learn_rate=BASELINE_LR,
                 use_gpu=(DEVICE != "cpu")
             )
         self.agent.set_task(task_name)
