@@ -1,4 +1,5 @@
 import numpy as np
+import time
 import copy
 import time as timer
 from collections import deque
@@ -22,6 +23,8 @@ class RolloutBuffer:
         self.length_buffer = deque(maxlen=100)
         
         self.ep_count = 0
+        self.step_count = 0
+        self.start_time = time.time()
     
     def add_transition(self, transitions):
         assert len(transitions) == self.num_envs
@@ -48,20 +51,28 @@ class RolloutBuffer:
                     self.path[i] = []
                     
                     self.ep_count += 1
+                    self.step_count += len(ss)
                     self.reward_buffer.append(sum(rr))
                     self.length_buffer.append(len(rr))
                     
                     if self.ep_count % 50 == 0:
-                        print("Total episode: %d, last_100_reward: %.4f, last_100_ep_length: %.4f"\
-                            %(self.ep_count, np.mean(self.reward_buffer), np.mean(self.length_buffer)))
+                        print("Total episode: %d, last_100_reward: %.4f, last_100_ep_length: %.4f, fps: %.4f"\
+                            %(self.ep_count, np.mean(self.reward_buffer), np.mean(self.length_buffer), self.step_count / (time.time() - self.start_time)))
                     
         
     def clear_buffer(self):
-        self.reward_buffer = deque(maxlen=100)
-        self.length_buffer = deque(maxlen=100)
         self.paths = []
         self.path = [[] for _ in range(self.num_envs)]
+    
+    def clear_log(self):
+        self.paths = []
+        self.path = [[] for _ in range(self.num_envs)]
+        self.reward_buffer = deque(maxlen=100)
+        self.length_buffer = deque(maxlen=100)
         self.num_traj = 0
+        self.ep_count = 0
+        self.step_count = 0
+        self.start_time = time.time()
 
 
 class BatchREINFORCEFTW:

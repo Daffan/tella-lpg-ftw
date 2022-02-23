@@ -2,6 +2,7 @@ from copy import deepcopy
 import typing
 import logging
 
+import numpy as np
 import gym
 import tella
 
@@ -10,20 +11,19 @@ from npg_cg_ftw import NPGFTW
 from mlp_baselines import MLPBaseline
 
 logger = logging.getLogger("LPG_FTW Agent")
-DEVICE = "cpu"
+DEVICE = "cuda:0"
 
 # Constants copied from experiments.habitat_ste_m15.py
 BASELINE_TRAINING_EPOCH = 20
 NORMALIZED_STEP_SIZE = 0.00001
 HVP_SAMPLEFRAC = 0.00833333333
-BATCH_SIZE = 128
+BATCH_SIZE = 256
 
 N = 50
 GAMMA = 0.995
 GAE_LAMBDA = None # 0.97
 
 POLICY_HIDDEN_SIZE = 128
-BASELINE_HIDDEN_SIZE = 128
 K=1
 MAX_K=2
 
@@ -86,13 +86,13 @@ class LpgFtwAgent(tella.ContinualRLAgent):
             self.agent.baselines[task_name] = MLPBaseline(
                 self.observation_space,
                 reg_coef=1e-3,
-                batch_size=BASELINE_HIDDEN_SIZE,
+                batch_size=BATCH_SIZE,
                 epochs=BASELINE_TRAINING_EPOCH,
                 learn_rate=BASELINE_LR,
                 use_gpu=(DEVICE != "cpu")
             )
         self.agent.set_task(task_name)
-        self.agent.rollout_buffer.clear_buffer()
+        self.agent.rollout_buffer.clear_log()
         
     def choose_actions(
         self, observations: typing.List[typing.Optional[tella.Observation]]
@@ -100,16 +100,21 @@ class LpgFtwAgent(tella.ContinualRLAgent):
         # Don't know whether torch.no_grad is needed or not
         # In original code, they didn't use torch._no_grad for eval
         actions = []
-        for obs in observations:
+        obs_new = [obs if obs is not None else self.observation_space.sample() for obs in observations]
+        obs_new = np.stack(obs_new)
+        obs_new = obs_new.reshape(obs_new.shape[0], -1)
+        
+        acts, act_infos = self.agent.policy.get_action(obs_new)
+        actions = []
+        for a, ai, obs in zip(acts, act_infos['evaluation'], observations):
             if obs is None:
                 actions.append(None)
             else:
-                obs = obs.reshape(1, -1)
-                a, agent_info = self.agent.policy.get_action(obs)
                 if self.training:
-                    actions.append(a[0]) # sampled from distribution
+                    actions.append(a)
                 else:
-                    actions.append(agent_info['evaluation'][0]) # maximum likelihood
+                    actions.append(ai)
+            
         return actions
 
     def receive_transitions(self, transitions: typing.List[typing.Optional[tella.Transition]]) -> None:
