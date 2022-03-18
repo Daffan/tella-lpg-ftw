@@ -55,7 +55,7 @@ class LpgFtwAgent(tella.ContinualRLAgent):
             use_gpu=(DEVICE != "cpu")
         )
         
-        self.agent_train = NPGFTW(
+        self.agent = NPGFTW(
             policy,
             baselines,
             num_envs=num_envs,
@@ -64,16 +64,15 @@ class LpgFtwAgent(tella.ContinualRLAgent):
             hvp_sample_frac=HVP_SAMPLEFRAC,
             use_gpu=(DEVICE != "cpu")
         )
-        self.agent = self.agent_train
         
         self.train = None # True for learning_block and False for evaluation_block
+        self.use_random_policy = False
     
     def block_start(self, is_learning_allowed: bool) -> None:
         super().block_start(is_learning_allowed)
         if is_learning_allowed:
             logger.info("About to start a new learning block")
             self.training = True
-            self.agent = self.agent_train
         else:
             logger.info("About to start a new evaluation block")
             self.training = False
@@ -82,39 +81,52 @@ class LpgFtwAgent(tella.ContinualRLAgent):
         logger.info(
             f"\tAbout to start interacting with a new task. task_name={task_name}"
         )
-        if not task_name in self.agent.all_baseline.keys():
-            self.agent.all_baseline[task_name] = MLPBaseline(
-                self.observation_space,
-                reg_coef=1e-3,
-                batch_size=BATCH_SIZE,
-                epochs=BASELINE_TRAINING_EPOCH,
-                learn_rate=BASELINE_LR,
-                use_gpu=(DEVICE != "cpu")
-            )
+        seen_tasks = list(self.agent.all_baseline.keys())
         self.task_name = task_name
-        self.agent.set_task(task_name)
-        self.agent.rollout_buffer.clear_log()
+        if len(seen_tasks) == 0 and not self.training: # first eval block without any training
+            self.use_random_policy = True
+        elif not task_name in seen_tasks:
+            if self.training:
+                self.agent.all_baseline[task_name] = MLPBaseline(
+                    self.observation_space,
+                    reg_coef=1e-3,
+                    batch_size=BATCH_SIZE,
+                    epochs=BASELINE_TRAINING_EPOCH,
+                    learn_rate=BASELINE_LR,
+                    use_gpu=(DEVICE != "cpu")
+                )
+                self.agent.set_task(task_name)
+                self.agent.rollout_buffer.clear_log()
+            else:
+                self.agent.set_task(seen_tasks[-1]) # use the policy of last trained task if the task has not been trained
+                self.agent.rollout_buffer.clear_log()
+        else:
+            self.agent.set_task(task_name)
+            self.agent.rollout_buffer.clear_log()
+            
         
     def choose_actions(
         self, observations: typing.List[typing.Optional[tella.Observation]]
     ) -> typing.List[typing.Optional[tella.Action]]:
         # Don't know whether torch.no_grad is needed or not
         # In original code, they didn't use torch._no_grad for eval
-        actions = []
-        obs_new = [obs if obs is not None else self.observation_space.sample() for obs in observations]
-        obs_new = np.stack(obs_new)
-        obs_new = obs_new.reshape(obs_new.shape[0], -1)
-        
-        acts, act_infos = self.agent.policy.get_action(obs_new)
-        actions = []
-        for a, ai, obs in zip(acts, act_infos['evaluation'], observations):
-            if obs is None:
-                actions.append(None)
-            else:
-                if self.training:
-                    actions.append(a)
+        if self.use_random_policy:
+            actions = [None if obs is None else self.action_space.sample() for obs in observations]
+        else:
+            actions = []
+            obs_new = [obs if obs is not None else self.observation_space.sample() for obs in observations]
+            obs_new = np.stack(obs_new)
+            obs_new = obs_new.reshape(obs_new.shape[0], -1)
+            acts, act_infos = self.agent.policy.get_action(obs_new)
+            actions = []
+            for a, ai, obs in zip(acts, act_infos['evaluation'], observations):
+                if obs is None:
+                    actions.append(None)
                 else:
-                    actions.append(ai)
+                    if self.training:
+                        actions.append(a)
+                    else:
+                        actions.append(ai)
             
         return actions
 
