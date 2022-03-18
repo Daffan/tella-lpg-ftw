@@ -15,13 +15,13 @@ DEVICE = "cuda:0"
 
 # Constants copied from experiments.habitat_ste_m15.py
 BASELINE_TRAINING_EPOCH = 20
-NORMALIZED_STEP_SIZE = 0.00005
+NORMALIZED_STEP_SIZE = 0.01
 HVP_SAMPLEFRAC = 0.02
 BATCH_SIZE = 128
 
 N = 50
 GAMMA = 0.995
-GAE_LAMBDA = None # 0.97
+GAE_LAMBDA = 0.97
 
 POLICY_HIDDEN_SIZE = 128
 BASELINE_HIDDEN_SIZE = 128
@@ -61,9 +61,8 @@ class LpgFtwAgent(tella.ContinualRLAgent):
             num_envs=num_envs,
             normalized_step_size=NORMALIZED_STEP_SIZE,
             seed=rng_seed,
-            use_gpu=(DEVICE != "cpu"),
             hvp_sample_frac=HVP_SAMPLEFRAC,
-            batch_size=BATCH_SIZE
+            use_gpu=(DEVICE != "cpu")
         )
         self.agent = self.agent_train
         
@@ -83,8 +82,8 @@ class LpgFtwAgent(tella.ContinualRLAgent):
         logger.info(
             f"\tAbout to start interacting with a new task. task_name={task_name}"
         )
-        if not task_name in self.agent.baselines.keys():
-            self.agent.baselines[task_name] = MLPBaseline(
+        if not task_name in self.agent.all_baseline.keys():
+            self.agent.all_baseline[task_name] = MLPBaseline(
                 self.observation_space,
                 reg_coef=1e-3,
                 batch_size=BATCH_SIZE,
@@ -92,6 +91,7 @@ class LpgFtwAgent(tella.ContinualRLAgent):
                 learn_rate=BASELINE_LR,
                 use_gpu=(DEVICE != "cpu")
             )
+        self.task_name = task_name
         self.agent.set_task(task_name)
         self.agent.rollout_buffer.clear_log()
         
@@ -126,8 +126,11 @@ class LpgFtwAgent(tella.ContinualRLAgent):
         transitions = [self.flat_observation(t) for t in transitions]
         
         self.agent.train_step(
+            N,
             transitions,
-            N=N, gamma=GAMMA, gae_lambda=GAE_LAMBDA
+            gamma=GAMMA,
+            gae_lambda=GAE_LAMBDA,
+            task_id=self.task_name
         )
 
     def flat_observation(self, transition: typing.Optional[tella.Transition]):

@@ -166,9 +166,11 @@ class BasicMLP(nn.Module):
 
         self.net = nn.Sequential()
         self.net.add_module('fc1', nn.Linear(in_dim, hidden_size))
-        self.net.add_module('relu1', nn.ReLU())
+        # self.net.add_module('relu1', nn.ReLU())
+        self.net.add_module('tanh1', nn.Tanh())
         self.net.add_module('fc2', nn.Linear(hidden_size, out_dim))
-        self.net.add_module('relu2', nn.ReLU())
+        # self.net.add_module('relu2', nn.ReLU())
+        self.net.add_module('tanh2', nn.Tanh())
 
     def forward(self, inputs):
         return self.net(inputs)
