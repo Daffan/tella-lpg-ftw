@@ -14,8 +14,8 @@ logger = logging.getLogger("LPG_FTW Agent")
 DEVICE = "cuda:0"
 
 # Constants copied from experiments.habitat_ste_m15.py
-BASELINE_TRAINING_EPOCH = 20
-NORMALIZED_STEP_SIZE = 0.01
+BASELINE_TRAINING_EPOCH = 10
+NORMALIZED_STEP_SIZE = 0.001
 HVP_SAMPLEFRAC = 0.02
 BATCH_SIZE = 128
 
@@ -28,7 +28,7 @@ BASELINE_HIDDEN_SIZE = 128
 K=1
 MAX_K=4
 
-BASELINE_LR = 1e-5
+BASELINE_LR = 1e-6
 
 class LpgFtwAgent(tella.ContinualRLAgent):
     def __init__(
@@ -86,6 +86,7 @@ class LpgFtwAgent(tella.ContinualRLAgent):
         if len(seen_tasks) == 0 and not self.training: # first eval block without any training
             self.use_random_policy = True
         elif not task_name in seen_tasks:
+            self.use_random_policy = False
             if self.training:
                 self.agent.all_baseline[task_name] = MLPBaseline(
                     self.observation_space,
@@ -101,6 +102,7 @@ class LpgFtwAgent(tella.ContinualRLAgent):
                 self.agent.set_task(seen_tasks[-1]) # use the policy of last trained task if the task has not been trained
                 self.agent.rollout_buffer.clear_log()
         else:
+            self.use_random_policy = False
             self.agent.set_task(task_name)
             self.agent.rollout_buffer.clear_log()
             
