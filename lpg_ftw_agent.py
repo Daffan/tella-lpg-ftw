@@ -125,10 +125,11 @@ class LpgFtwAgent(tella.ContinualRLAgent):
                 if obs is None:
                     actions.append(None)
                 else:
-                    if self.training:
-                        actions.append(a)
-                    else:
-                        actions.append(ai)
+                    #if self.training:
+                    #    actions.append(a)
+                    #else:
+                    #    actions.append(ai)
+                    actions.append(a)
             
         return actions
 
